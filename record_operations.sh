@@ -14,15 +14,27 @@ select_table() {
     
     if [ -z "$table_list" ]; then
         show_error "No tables found!"
-        return
+        return 1
     fi
 
-    echo "$table_list" | zenity --list \
+    local table_name=$(echo "$table_list" | zenity --list \
         --title="$purpose Record" \
         --text="Select table:" \
         --column="Table Name" \
+        --ok-label="Select" \
+        --cancel-label="Cancel" \
         --width=400 \
-        --height=$LIST_HEIGHT 2>/dev/null
+        --height=$LIST_HEIGHT 2>/dev/null)
+
+    local exit_status=$?
+
+    # If cancelled or no selection
+    if [ $exit_status -ne 0 ] || [ -z "$table_name" ]; then
+        return 1
+    fi
+
+    echo "$table_name"
+    return 0
 }
 
 # Insert new record into table
@@ -30,7 +42,7 @@ insert_record() {
     # Select table
     local table_name=$(select_table "Insert")
     
-    if [ $? -ne 0 ] || [ -z "$table_name" ]; then
+    if [ $? -ne 0 ]; then
         return
     fi
 
@@ -38,7 +50,7 @@ insert_record() {
     local data_file="$DATABASES_DIR/$CURRENT_DB/$table_name.data"
 
     # Build form command
-    local form_cmd="zenity --forms --title=\"Insert into $table_name\" --text=\"Enter data:\""
+    local form_cmd="zenity --forms --title=\"Insert into $table_name\" --text=\"Enter data:\" --ok-label=\"Insert\" --cancel-label=\"Cancel\""
     
     while IFS=':' read -r col_name col_type col_pk; do
         form_cmd="$form_cmd --add-entry=\"$col_name ($col_type):\""
@@ -49,7 +61,11 @@ insert_record() {
     # Get user input
     local result=$(eval $form_cmd)
 
-    if [ $? -ne 0 ]; then
+    local exit_status=$?
+
+    # Check if user cancelled
+    if [ $exit_status -ne 0 ]; then
+        # User cancelled - just return without any message
         return
     fi
 
@@ -114,7 +130,7 @@ select_records() {
     # Select table
     local table_name=$(select_table "Select")
     
-    if [ $? -ne 0 ] || [ -z "$table_name" ]; then
+    if [ $? -ne 0 ]; then
         return
     fi
 
@@ -132,11 +148,16 @@ select_records() {
         --title="Select Mode" \
         --text="Choose option:" \
         --column="No" --column="Mode" \
+        --ok-label="Select" \
+        --cancel-label="Cancel" \
         --width=400 --height=250 \
         "1" "Show All Records" \
         "2" "Search by Primary Key" 2>/dev/null)
 
-    if [ $? -ne 0 ]; then
+    local exit_status=$?
+
+    # Check if user cancelled
+    if [ $exit_status -ne 0 ]; then
         return
     fi
 
@@ -172,10 +193,22 @@ select_records() {
         local pk_value=$(zenity --entry \
             --title="Search" \
             --text="Enter $pk_col value:" \
+            --ok-label="Search" \
+            --cancel-label="Cancel" \
             --width=400 2>/dev/null)
 
-        if [ $? -ne 0 ] || [ -z "$pk_value" ]; then
+        exit_status=$?
+
+        # Check if user cancelled
+        if [ $exit_status -ne 0 ]; then
             rm -f "$temp_file"
+            return
+        fi
+
+        # Check if value is empty
+        if [ -z "$pk_value" ]; then
+            rm -f "$temp_file"
+            show_error "Search value cannot be empty!"
             return
         fi
 
@@ -205,6 +238,7 @@ select_records() {
     # Display results
     zenity --text-info \
         --title="Results from $table_name" \
+        --ok-label="Close" \
         --width=$TEXT_WIDTH \
         --height=$TEXT_HEIGHT \
         --font="Monospace 10" \
@@ -218,7 +252,7 @@ delete_record() {
     # Select table
     local table_name=$(select_table "Delete")
     
-    if [ $? -ne 0 ] || [ -z "$table_name" ]; then
+    if [ $? -ne 0 ]; then
         return
     fi
 
@@ -232,9 +266,20 @@ delete_record() {
     local pk_value=$(zenity --entry \
         --title="Delete Record" \
         --text="Enter $pk_col value to delete:" \
+        --ok-label="Delete" \
+        --cancel-label="Cancel" \
         --width=400 2>/dev/null)
 
-    if [ $? -ne 0 ] || [ -z "$pk_value" ]; then
+    local exit_status=$?
+
+    # Check if user cancelled
+    if [ $exit_status -ne 0 ]; then
+        return
+    fi
+
+    # Check if value is empty
+    if [ -z "$pk_value" ]; then
+        show_error "Value cannot be empty!"
         return
     fi
 
@@ -269,7 +314,7 @@ update_record() {
     # Select table
     local table_name=$(select_table "Update")
     
-    if [ $? -ne 0 ] || [ -z "$table_name" ]; then
+    if [ $? -ne 0 ]; then
         return
     fi
 
@@ -283,9 +328,20 @@ update_record() {
     local pk_value=$(zenity --entry \
         --title="Update Record" \
         --text="Enter $pk_col value:" \
+        --ok-label="Next" \
+        --cancel-label="Cancel" \
         --width=400 2>/dev/null)
 
-    if [ $? -ne 0 ] || [ -z "$pk_value" ]; then
+    local exit_status=$?
+
+    # Check if user cancelled
+    if [ $exit_status -ne 0 ]; then
+        return
+    fi
+
+    # Check if value is empty
+    if [ -z "$pk_value" ]; then
+        show_error "Value cannot be empty!"
         return
     fi
 
@@ -322,10 +378,20 @@ update_record() {
         --title="Select Column" \
         --text="Choose column to update:" \
         --column="No" --column="Column" \
+        --ok-label="Select" \
+        --cancel-label="Cancel" \
         --width=400 \
         --height=$LIST_HEIGHT 2>/dev/null)
 
-    if [ $? -ne 0 ] || [ -z "$col_choice" ]; then
+    exit_status=$?
+
+    # Check if user cancelled
+    if [ $exit_status -ne 0 ]; then
+        return
+    fi
+
+    # Check if selection is empty
+    if [ -z "$col_choice" ]; then
         return
     fi
 
@@ -338,9 +404,14 @@ update_record() {
     local new_value=$(zenity --entry \
         --title="New Value" \
         --text="Enter new value for $col_name ($col_type):" \
+        --ok-label="Update" \
+        --cancel-label="Cancel" \
         --width=400 2>/dev/null)
 
-    if [ $? -ne 0 ]; then
+    exit_status=$?
+
+    # Check if user cancelled
+    if [ $exit_status -ne 0 ]; then
         return
     fi
 
