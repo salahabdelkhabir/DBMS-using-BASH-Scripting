@@ -11,9 +11,21 @@ create_table() {
     local table_name=$(zenity --entry \
         --title="Create Table" \
         --text="Enter table name:" \
+        --ok-label="Next" \
+        --cancel-label="Cancel" \
         --width=400 2>/dev/null)
 
-    if [ $? -ne 0 ] || [ -z "$table_name" ]; then
+    local exit_status=$?
+
+    # Check if user cancelled
+    if [ $exit_status -ne 0 ]; then
+        # User cancelled - just return without any message
+        return
+    fi
+
+    # Validate: name cannot be empty
+    if [ -z "$table_name" ]; then
+        show_error "Table name cannot be empty!"
         return
     fi
 
@@ -27,9 +39,15 @@ create_table() {
     local num_cols=$(zenity --entry \
         --title="Create Table" \
         --text="How many columns?" \
+        --ok-label="Next" \
+        --cancel-label="Cancel" \
         --width=400 2>/dev/null)
 
-    if [ $? -ne 0 ]; then
+    exit_status=$?
+
+    # Check if user cancelled
+    if [ $exit_status -ne 0 ]; then
+        # User cancelled - just return without any message
         return
     fi
 
@@ -58,12 +76,16 @@ create_table() {
             --add-entry="Column Name:" \
             --add-combo="Data Type:" \
             --combo-values="Int|String" \
+            --ok-label="Next" \
+            --cancel-label="Cancel" \
             --width=400 2>/dev/null)
 
+        exit_status=$?
+
         # If user cancelled, delete table files and exit
-        if [ $? -ne 0 ]; then
+        if [ $exit_status -ne 0 ]; then
             rm -f "$meta_file" "$data_file"
-            show_error "Table creation cancelled!"
+            # User cancelled - just return without any message
             return
         fi
 
@@ -131,6 +153,7 @@ list_tables() {
     # Display tables
     echo -e "$output" | zenity --text-info \
         --title="Tables in $CURRENT_DB" \
+        --ok-label="Close" \
         --width=600 \
         --height=$WINDOW_HEIGHT 2>/dev/null
 }
@@ -153,19 +176,30 @@ drop_table() {
         --title="Drop Table" \
         --text="Select table to delete:" \
         --column="Table Name" \
+        --ok-label="Select" \
+        --cancel-label="Cancel" \
         --width=400 \
         --height=$LIST_HEIGHT 2>/dev/null)
 
-    # If table selected
-    if [ $? -eq 0 ] && [ -n "$selected" ]; then
-        # Ask for confirmation
-        show_question "Delete table '$selected'?\n\nAll data will be lost!"
-        
-        # If confirmed, delete table
-        if [ $? -eq 0 ]; then
-            rm -f "$db_path/$selected.meta"
-            rm -f "$db_path/$selected.data"
-            show_info "Table '$selected' deleted!"
-        fi
+    local exit_status=$?
+
+    # If user cancelled, return
+    if [ $exit_status -ne 0 ]; then
+        return
+    fi
+
+    # If no table selected, return
+    if [ -z "$selected" ]; then
+        return
+    fi
+
+    # Ask for confirmation
+    show_question "Delete table '$selected'?\n\nAll data will be lost!"
+    
+    # If confirmed, delete table
+    if [ $? -eq 0 ]; then
+        rm -f "$db_path/$selected.meta"
+        rm -f "$db_path/$selected.data"
+        show_info "Table '$selected' deleted!"
     fi
 }
