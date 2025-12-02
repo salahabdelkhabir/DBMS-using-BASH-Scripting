@@ -3,6 +3,7 @@
 # ============================================================
 # UTILITY FUNCTIONS - utils.sh
 # Helper functions used throughout the application
+# UPDATED WITH VALIDATION
 # ============================================================
 
 # Check if Zenity is installed
@@ -77,17 +78,97 @@ database_exists() {
     fi
 }
 
-# Check if table exists in current database
-# Parameter: table name
-# Returns: 0 if exists, 1 if not
-table_exists() {
-    if [ -f "$DATABASES_DIR/$CURRENT_DB/$1.meta" ]; then
-        return 0
-    else
+# ============================================================
+# NEW: Validate table metadata structure
+# ============================================================
+# Parameters: database_name (optional), table_name
+# Returns: 0 if valid, 1 if invalid
+validate_table_metadata() {
+    local db_name="${1:-$CURRENT_DB}"
+    local table_name="$2"
+    
+    # If only one parameter, assume it's table name
+    if [ -z "$table_name" ]; then
+        table_name="$db_name"
+        db_name="$CURRENT_DB"
+    fi
+    
+    local meta_file="$DATABASES_DIR/$db_name/$table_name.meta"
+    
+    # Check if metadata file exists
+    if [ ! -f "$meta_file" ]; then
         return 1
     fi
+    
+    # Check if metadata file is empty
+    if [ ! -s "$meta_file" ]; then
+        return 1
+    fi
+    
+    # Check for empty column names (line starting with :)
+    if grep -q "^:" "$meta_file"; then
+        return 1
+    fi
+    
+    # Check for proper format (must have colons)
+    if ! grep -q ":" "$meta_file"; then
+        return 1
+    fi
+    
+    # Count primary keys
+    local pk_count=$(grep -c ":PK" "$meta_file" 2>/dev/null)
+    
+    # Must have exactly one primary key
+    if [ "$pk_count" -ne 1 ]; then
+        return 1
+    fi
+    
+    return 0
 }
 
+# ============================================================
+# UPDATED: Check if table exists AND is valid
+# ============================================================
+# Parameter: table name
+# Returns: 0 if exists and valid, 1 if not
+table_exists() {
+    local db_name=$1
+    local table_name=$2
+    
+    # Check if files exist
+    if [ ! -f "$DATABASES_DIR/$db_name/$table_name.meta" ]; then
+        return 1
+    fi
+    if [ ! -f "$DATABASES_DIR/$db_name/$table_name.data" ]; then
+        return 1
+    fi
+    
+    # Validate table structure
+    local meta_file="$DATABASES_DIR/$db_name/$table_name.meta"
+    
+    # Check if metadata file is empty
+    if [ ! -s "$meta_file" ]; then
+        return 1
+    fi
+    
+    # Check for empty column names
+    if grep -q "^:" "$meta_file"; then
+        return 1
+    fi
+    
+    # Check for proper format
+    if ! grep -q ":" "$meta_file"; then
+        return 1
+    fi
+    
+    # Count primary keys - must be exactly 1
+    local pk_count=$(grep -c ":PK" "$meta_file" 2>/dev/null)
+    if [ "$pk_count" -ne 1 ]; then
+        return 1
+    fi
+    
+    return 0
+}
 # Get primary key column name from table metadata
 # Parameter: table name
 # Returns: primary key column name
