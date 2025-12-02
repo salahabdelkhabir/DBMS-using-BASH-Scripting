@@ -8,17 +8,22 @@
 # Create new database
 create_database() {
     # Ask user for database name
-    local db_name=$(zenity --entry \
+    db_name=$(zenity --entry \
         --title="Create Database" \
         --text="Enter database name:" \
+        --ok-label="Create" \
+        --cancel-label="Cancel" \
         --width=400 2>/dev/null)
 
-    # Check if user cancelled
-    if [ $? -ne 0 ]; then
+    # Capture exit status
+    result=$?
+
+    # If user cancelled, return silently
+    if [ $result -ne 0 ]; then
         return
     fi
 
-    # Validate: name cannot be empty
+    # If name is empty (user clicked OK with empty field)
     if [ -z "$db_name" ]; then
         show_error "Database name cannot be empty!"
         return
@@ -40,7 +45,7 @@ create_database() {
 # List all databases
 list_databases() {
     # Get list of databases
-    local db_list=$(get_database_list)
+    db_list=$(get_database_list)
     
     # Check if there are any databases
     if [ -z "$db_list" ]; then
@@ -49,11 +54,12 @@ list_databases() {
     fi
 
     # Format list with numbers
-    local formatted_list=$(echo "$db_list" | nl)
+    formatted_list=$(echo "$db_list" | nl)
     
     # Display in text window
     echo "$formatted_list" | zenity --text-info \
         --title="Databases List" \
+        --ok-label="Close" \
         --width=400 \
         --height=$LIST_HEIGHT 2>/dev/null
 }
@@ -61,7 +67,7 @@ list_databases() {
 # Connect to existing database
 connect_database() {
     # Get list of databases
-    local db_list=$(get_database_list)
+    db_list=$(get_database_list)
     
     # Check if there are any databases
     if [ -z "$db_list" ]; then
@@ -74,11 +80,21 @@ connect_database() {
         --title="Connect to Database" \
         --text="Select a database:" \
         --column="Database Name" \
+        --ok-label="Connect" \
+        --cancel-label="Cancel" \
         --width=400 \
         --height=$LIST_HEIGHT 2>/dev/null)
 
+    # Capture exit status
+    result=$?
+
+    # If user cancelled, return silently
+    if [ $result -ne 0 ]; then
+        return
+    fi
+
     # If user selected a database, show database menu
-    if [ $? -eq 0 ] && [ -n "$CURRENT_DB" ]; then
+    if [ -n "$CURRENT_DB" ]; then
         database_menu
     fi
 }
@@ -86,7 +102,7 @@ connect_database() {
 # Delete database
 drop_database() {
     # Get list of databases
-    local db_list=$(get_database_list)
+    db_list=$(get_database_list)
     
     # Check if there are any databases
     if [ -z "$db_list" ]; then
@@ -95,22 +111,34 @@ drop_database() {
     fi
 
     # Show selection dialog
-    local db_name=$(echo "$db_list" | zenity --list \
+    db_name=$(echo "$db_list" | zenity --list \
         --title="Drop Database" \
         --text="Select database to delete:" \
         --column="Database Name" \
+        --ok-label="Select" \
+        --cancel-label="Cancel" \
         --width=400 \
         --height=$LIST_HEIGHT 2>/dev/null)
 
-    # If user selected a database
-    if [ $? -eq 0 ] && [ -n "$db_name" ]; then
-        # Ask for confirmation
-        show_question "Are you sure you want to delete '$db_name'?\n\nThis cannot be undone!"
-        
-        # If confirmed, delete database
-        if [ $? -eq 0 ]; then
-            rm -rf "$DATABASES_DIR/$db_name"
-            show_info "Database '$db_name' deleted successfully!"
-        fi
+    # Capture exit status
+    result=$?
+
+    # If user cancelled, return silently
+    if [ $result -ne 0 ]; then
+        return
+    fi
+
+    # If no database selected, return
+    if [ -z "$db_name" ]; then
+        return
+    fi
+
+    # Ask for confirmation
+    show_question "Are you sure you want to delete '$db_name'?\n\nThis cannot be undone!"
+    
+    # If confirmed, delete database
+    if [ $? -eq 0 ]; then
+        rm -rf "$DATABASES_DIR/$db_name"
+        show_info "Database '$db_name' deleted successfully!"
     fi
 }
