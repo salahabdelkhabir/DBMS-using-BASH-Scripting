@@ -61,10 +61,8 @@ get_database_list() {
 get_table_list() {
     local db_path="$DATABASES_DIR/$CURRENT_DB"
     
-    for meta_file in "$db_path"/*.meta 2>/dev/null; do
-        if [ -f "$meta_file" ]; then
-            basename "$meta_file" .meta
-        fi
+    find "$db_path" -name "*.meta" -type f 2>/dev/null | while read -r meta_file; do
+        basename "$meta_file" .meta
     done
 }
 
